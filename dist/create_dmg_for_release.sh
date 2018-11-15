@@ -12,7 +12,7 @@ applicationName=DTerm.app
 backgroundPictureName=dmg_background.png
 finalDMGName=${title}.dmg
 
-function FinalizeDMG()
+function finalize_dmg()
 {
 	echo "***************************"
 	echo ${FUNCNAME[0]}
@@ -24,7 +24,7 @@ function FinalizeDMG()
 	rm -f ./pack.temp.dmg 
 }
 
-function CreateDMG()
+function create_dmg()
 {
 	echo "***************************"
 	echo ${FUNCNAME[0]}
@@ -37,7 +37,7 @@ function CreateDMG()
 	         egrep '^/dev/' | sed 1q | awk '{print $1}')
 }
 
-function CopyBackgroundImage()
+function copy_background_image()
 {
 	echo "***************************"
 	echo ${FUNCNAME[0]}
@@ -45,7 +45,7 @@ function CopyBackgroundImage()
 	cp ../Images/dmg_background.png /Volumes/DTerm/.background/
 }
 
-function SetFolderOptions()
+function set_folder_options()
 {
 	echo "***************************"
 	echo ${FUNCNAME[0]}
@@ -72,7 +72,7 @@ function SetFolderOptions()
 	' | osascript
 }
 
-CreateDMG
-CopyBackgroundImage
-SetFolderOptions
-FinalizeDMG
+create_dmg
+copy_background_image
+set_folder_options
+finalize_dmg
