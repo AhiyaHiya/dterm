@@ -21,16 +21,7 @@ enum iTerm2Enum {
 };
 typedef enum iTerm2Enum iTerm2Enum;
 
-
-
-/*
- * Standard Suite
- */
-
-// A scriptable object.
-@interface iTerm2Item : SBObject
-
-@property (copy) NSDictionary *properties;  // All of the object's properties.
+@protocol iTerm2GenericMethods
 
 - (void) closeSaving:(iTerm2Savo)saving savingIn:(NSURL *)savingIn;  // Close an object.
 - (void) delete;  // Delete an object.
@@ -46,11 +37,25 @@ typedef enum iTerm2Enum iTerm2Enum;
 
 @end
 
+
+
+/*
+ * Standard Suite
+ */
+
+// A scriptable object.
+@interface iTerm2Item : SBObject <iTerm2GenericMethods>
+
+@property (copy) NSDictionary *properties;  // All of the object's properties.
+
+
+@end
+
 // An application's top level scripting object.
 @interface iTerm2ITermApplication : SBApplication
 
-- (SBElementArray *) documents;
-- (SBElementArray *) windows;
+- (SBElementArray<iTerm2Document *> *) documents;
+- (SBElementArray<iTerm2Window *> *) windows;
 
 @property (readonly) BOOL frontmost;  // Is this the frontmost (active) application?
 @property (copy, readonly) NSString *name;  // The name of the application.
@@ -109,11 +114,11 @@ typedef enum iTerm2Enum iTerm2Enum;
 // This subdivides the text into chunks that all have the same attributes.
 @interface iTerm2AttributeRun : iTerm2Item
 
-- (SBElementArray *) attachments;
-- (SBElementArray *) attributeRuns;
-- (SBElementArray *) characters;
-- (SBElementArray *) paragraphs;
-- (SBElementArray *) words;
+- (SBElementArray<iTerm2Attachment *> *) attachments;
+- (SBElementArray<iTerm2AttributeRun *> *) attributeRuns;
+- (SBElementArray<iTerm2Character *> *) characters;
+- (SBElementArray<iTerm2Paragraph *> *) paragraphs;
+- (SBElementArray<iTerm2Word *> *) words;
 
 @property (copy) NSColor *color;  // The color of the first character.
 @property (copy) NSString *font;  // The name of the font of the first character.
@@ -125,11 +130,11 @@ typedef enum iTerm2Enum iTerm2Enum;
 // This subdivides the text into characters.
 @interface iTerm2Character : iTerm2Item
 
-- (SBElementArray *) attachments;
-- (SBElementArray *) attributeRuns;
-- (SBElementArray *) characters;
-- (SBElementArray *) paragraphs;
-- (SBElementArray *) words;
+- (SBElementArray<iTerm2Attachment *> *) attachments;
+- (SBElementArray<iTerm2AttributeRun *> *) attributeRuns;
+- (SBElementArray<iTerm2Character *> *) characters;
+- (SBElementArray<iTerm2Paragraph *> *) paragraphs;
+- (SBElementArray<iTerm2Word *> *) words;
 
 @property (copy) NSColor *color;  // The color of the first character.
 @property (copy) NSString *font;  // The name of the font of the first character.
@@ -141,11 +146,11 @@ typedef enum iTerm2Enum iTerm2Enum;
 // This subdivides the text into paragraphs.
 @interface iTerm2Paragraph : iTerm2Item
 
-- (SBElementArray *) attachments;
-- (SBElementArray *) attributeRuns;
-- (SBElementArray *) characters;
-- (SBElementArray *) paragraphs;
-- (SBElementArray *) words;
+- (SBElementArray<iTerm2Attachment *> *) attachments;
+- (SBElementArray<iTerm2AttributeRun *> *) attributeRuns;
+- (SBElementArray<iTerm2Character *> *) characters;
+- (SBElementArray<iTerm2Paragraph *> *) paragraphs;
+- (SBElementArray<iTerm2Word *> *) words;
 
 @property (copy) NSColor *color;  // The color of the first character.
 @property (copy) NSString *font;  // The name of the font of the first character.
@@ -157,11 +162,11 @@ typedef enum iTerm2Enum iTerm2Enum;
 // Rich (styled) text
 @interface iTerm2Text : iTerm2Item
 
-- (SBElementArray *) attachments;
-- (SBElementArray *) attributeRuns;
-- (SBElementArray *) characters;
-- (SBElementArray *) paragraphs;
-- (SBElementArray *) words;
+- (SBElementArray<iTerm2Attachment *> *) attachments;
+- (SBElementArray<iTerm2AttributeRun *> *) attributeRuns;
+- (SBElementArray<iTerm2Character *> *) characters;
+- (SBElementArray<iTerm2Paragraph *> *) paragraphs;
+- (SBElementArray<iTerm2Word *> *) words;
 
 @property (copy) NSColor *color;  // The color of the first character.
 @property (copy) NSString *font;  // The name of the font of the first character.
@@ -181,11 +186,11 @@ typedef enum iTerm2Enum iTerm2Enum;
 // This subdivides the text into words.
 @interface iTerm2Word : iTerm2Item
 
-- (SBElementArray *) attachments;
-- (SBElementArray *) attributeRuns;
-- (SBElementArray *) characters;
-- (SBElementArray *) paragraphs;
-- (SBElementArray *) words;
+- (SBElementArray<iTerm2Attachment *> *) attachments;
+- (SBElementArray<iTerm2AttributeRun *> *) attributeRuns;
+- (SBElementArray<iTerm2Character *> *) characters;
+- (SBElementArray<iTerm2Paragraph *> *) paragraphs;
+- (SBElementArray<iTerm2Word *> *) words;
 
 @property (copy) NSColor *color;  // The color of the first character.
 @property (copy) NSString *font;  // The name of the font of the first character.
@@ -203,9 +208,10 @@ typedef enum iTerm2Enum iTerm2Enum;
 // Main application class
 @interface iTerm2ITermApplication (ITermSuite)
 
-- (SBElementArray *) terminals;
+- (SBElementArray<iTerm2Terminal *> *) terminals;
 
 @property (copy) iTerm2Terminal *currentTerminal;  // currently active terminal
+@property (copy) NSString *uriToken;  // URI token
 
 @end
 
@@ -233,7 +239,7 @@ typedef enum iTerm2Enum iTerm2Enum;
 // A pseudo terminal
 @interface iTerm2Terminal : iTerm2Item
 
-- (SBElementArray *) sessions;
+- (SBElementArray<iTerm2Session *> *) sessions;
 
 @property BOOL antiAlias;  // Anti alias for window
 @property (copy) iTerm2Session *currentSession;  // current session in the terminal
@@ -249,7 +255,7 @@ typedef enum iTerm2Enum iTerm2Enum;
  * Type Definitions
  */
 
-@interface iTerm2PrintSettings : SBObject
+@interface iTerm2PrintSettings : SBObject <iTerm2GenericMethods>
 
 @property NSInteger copies;  // the number of copies of a document to be printed
 @property BOOL collating;  // Should printed copies be collated?
@@ -262,17 +268,6 @@ typedef enum iTerm2Enum iTerm2Enum;
 @property (copy) NSString *faxNumber;  // for fax number
 @property (copy) NSString *targetPrinter;  // for target printer
 
-- (void) closeSaving:(iTerm2Savo)saving savingIn:(NSURL *)savingIn;  // Close an object.
-- (void) delete;  // Delete an object.
-- (void) duplicateTo:(SBObject *)to withProperties:(NSDictionary *)withProperties;  // Copy object(s) and put the copies at a new location.
-- (BOOL) exists;  // Verify if an object exists.
-- (void) moveTo:(SBObject *)to;  // Move object(s) to a new location.
-- (void) saveAs:(NSString *)as in:(NSURL *)in_;  // Save an object.
-- (void) execCommand:(NSString *)command;  // Executes a command in a session (attach a trailing space for commands without carriage return)
-- (iTerm2Session *) launchSession:(NSString *)session;  // Launches a default or saved session
-- (void) select;  // Selects a specified session
-- (void) terminate;  // Terminates a session
-- (void) writeContentsOfFile:(NSString *)contentsOfFile text:(NSString *)text;  // Writes text or file contents into a session
 
 @end
 

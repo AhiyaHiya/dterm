@@ -9,6 +9,7 @@
 #import "Finder.h"
 #import "PathFinder.h"
 #import "RTFWindowController.h"
+#import "SystemEvents.h"
 
 #import <MASShortcut/MASShortcutBinder.h>
 
@@ -18,6 +19,8 @@ NSString* const DTResultsToKeepKey = @"DTResultsToKeep";
 NSString* const DTTextColorKey = @"DTTextColor";
 NSString* const DTFontNameKey = @"DTFontName";
 NSString* const DTFontSizeKey = @"DTFontSize";
+NSString* const DTDisableWorkdirUpfind = @"DTDisableWorkdirUpfind";
+NSString* const DTWorkdirUpfindEntries = @"DTWorkdirUpfindEntries";
 
 static NSString* const DTHotkeyAlsoDeactivatesKey = @"DTHotkeyAlsoDeactivates";
 static NSString* const DTShowDockIconKey = @"DTShowDockIcon";
@@ -55,8 +58,10 @@ static NSString* const DTDisableAntialiasingKey = @"DTDisableAntialiasing";
 	setenv("TERM_PROGRAM", "DTerm", 1);
 	setenv("TERM_PROGRAM_VERSION", [[[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleVersion"] cStringUsingEncoding:NSASCIIStringEncoding], 1);
 	
-	NSDictionary* defaultsDict = @{DTResultsToKeepKey: @"5",
-								  DTHotkeyAlsoDeactivatesKey: @NO,
+	NSDictionary* defaultsDict =@{DTResultsToKeepKey: @"5",
+                                  DTHotkeyAlsoDeactivatesKey: @NO,
+                                  DTDisableWorkdirUpfind: @NO,
+                                  DTWorkdirUpfindEntries: @"Makefile, Rakefile, build.xml, pom.xml, .git, .svn, .hg",
 								  DTShowDockIconKey: @YES,
 								  DTTextColorKey: [NSKeyedArchiver archivedDataWithRootObject:[[NSColor whiteColor] colorWithAlphaComponent:0.9]],
 								  DTFontNameKey: @"Monaco",
@@ -174,6 +179,18 @@ static NSString* const DTDisableAntialiasingKey = @"DTDisableAntialiasing";
 	return windowBounds;
 }
 
+- (NSRect)windowFrameOfSystemEventsWindow:(SystemEventsWindow *)win {
+    NSArray * position = [(SBObject *)[(SystemEventsAttribute *)[[win attributes] objectWithName:@"AXPosition"] value] get];
+    NSArray * size = [(SBObject *)[(SystemEventsAttribute *)[[win attributes] objectWithName:@"AXSize"] value] get];
+    NSRect windowBounds;
+    windowBounds.size.width = [[size objectAtIndex:0] floatValue];
+    windowBounds.size.height = [[size objectAtIndex:1] floatValue];
+    windowBounds.origin.x = [[position objectAtIndex:0] floatValue];
+    windowBounds.origin.y = [[position objectAtIndex:1] floatValue];
+    NSLog(@"   window bounds: %@", NSStringFromRect(windowBounds));
+    return windowBounds;
+}
+
 - (NSString*)fileAXURLStringOfAXUIElement:(AXUIElementRef)uiElement {
 	CFTypeRef axURL = NULL;
 	
@@ -202,117 +219,6 @@ static NSString* const DTDisableAntialiasingKey = @"DTDisableAntialiasing";
 	return nil;
 }
 
-- (BOOL)findWindowURL:(NSURL * __autoreleasing *)windowURL selectionURLs:(NSArray* __autoreleasing *)selectionURLStrings windowFrame:(NSRect*)windowFrame ofAXApplication:(CFTypeRef)focusedApplication {
-	AXError axErr = kAXErrorSuccess;
-	
-	if(windowURL)
-		*windowURL = nil;
-	if(selectionURLStrings)
-		*selectionURLStrings = nil;
-	if(windowFrame)
-		*windowFrame = NSZeroRect;
-	
-	// Mechanism 1: Find front window AXDocument (a CFURL), and use that window
-	
-	// Follow to main window
-	CFTypeRef mainWindow = NULL;
-	axErr = AXUIElementCopyAttributeValue(focusedApplication, kAXMainWindowAttribute, &mainWindow);
-	CF_AUTORELEASE(mainWindow);
-	if((axErr != kAXErrorSuccess) || !mainWindow) {
-#ifdef DEVBUILD
-		NSLog(@"Couldn't get main window: %d", axErr);
-#endif
-		goto failedAXDocument;
-	}
-	
-	// Get the window's AXDocument URL string
-	CFTypeRef axDocumentURLString = NULL;
-	axErr = AXUIElementCopyAttributeValue(mainWindow, kAXDocumentAttribute, &axDocumentURLString);
-	CF_AUTORELEASE(axDocumentURLString);
-	if((axErr != kAXErrorSuccess) || !axDocumentURLString) {
-#ifdef DEVBUILD
-		NSLog(@"Couldn't get AXDocument: %d", axErr);
-#endif
-		goto failedAXDocument;
-	}
-	
-	// OK, we're a go with this method!
-	if(windowURL)
-		*windowURL = [NSURL URLWithString:(__bridge NSString*)axDocumentURLString];
-	if(selectionURLStrings)
-		*selectionURLStrings = @[(__bridge NSString*)axDocumentURLString];
-	if(windowFrame)
-		*windowFrame = [self windowFrameOfAXWindow:mainWindow];
-	return YES;
-	
-	
-failedAXDocument:	;
-	
-	// Mechanism 2: Find focused UI element and try to find a selection from it.
-	
-	// Find focused UI element
-	CFTypeRef focusedUIElement = NULL;
-	axErr = AXUIElementCopyAttributeValue(focusedApplication, kAXFocusedUIElementAttribute, &focusedUIElement);
-	CF_AUTORELEASE(focusedUIElement);
-	if((axErr != kAXErrorSuccess) || !focusedUIElement) {
-#ifdef DEVBUILD
-		NSLog(@"Couldn't get AXFocusedUIElement");
-#endif
-		return NO;
-	}
-	
-	// Does the focused UI element have any selected children or selected rows? Great for file views.
-	CFTypeRef focusedSelectedChildren = NULL;
-	axErr = AXUIElementCopyAttributeValue(focusedUIElement, kAXSelectedChildrenAttribute, &focusedSelectedChildren);
-	CF_AUTORELEASE(focusedSelectedChildren);
-	if((axErr != kAXErrorSuccess) || !focusedSelectedChildren || !CFArrayGetCount(focusedSelectedChildren)) {
-		axErr = AXUIElementCopyAttributeValue(focusedUIElement, kAXSelectedRowsAttribute, &focusedSelectedChildren);
-		CF_AUTORELEASE(focusedSelectedChildren);
-	}
-	if((axErr == kAXErrorSuccess) && focusedSelectedChildren) {
-		// If it *worked*, we see if we can extract URLs from these selected children
-		NSMutableArray* tmpSelectionURLs = [NSMutableArray array];
-		for(CFIndex i=0; i<CFArrayGetCount(focusedSelectedChildren); i++) {
-			CFTypeRef selectedChild = CFArrayGetValueAtIndex(focusedSelectedChildren, i);
-			NSString* selectedChildURLString = [self fileAXURLStringOfAXUIElement:selectedChild];
-			if(selectedChildURLString)
-				[tmpSelectionURLs addObject:selectedChildURLString];
-		}
-		
-		// If we have selection URLs now, grab the window the focused UI element belongs to
-		if(tmpSelectionURLs.count) {
-			CFTypeRef focusWindow = NULL;
-			axErr = AXUIElementCopyAttributeValue(focusedUIElement, kAXWindowAttribute, &focusWindow);
-			CF_AUTORELEASE(focusWindow);
-			if((axErr == kAXErrorSuccess) && focusWindow) {
-				// We're good with this! Return the values.
-				if(selectionURLStrings)
-					*selectionURLStrings = tmpSelectionURLs;
-				if(windowFrame)
-					*windowFrame = [self windowFrameOfAXWindow:focusWindow];
-				return YES;
-			}
-		}
-	}
-	
-	// Does the focused UI element have an AXURL of its own?
-	NSString* focusedUIElementURLString = [self fileAXURLStringOfAXUIElement:focusedUIElement];
-	if(focusedUIElementURLString) {
-		CFTypeRef focusWindow = NULL;
-		axErr = AXUIElementCopyAttributeValue(focusedUIElement, kAXWindowAttribute, &focusWindow);
-		CF_AUTORELEASE(focusWindow);
-		if((axErr == kAXErrorSuccess) && focusWindow) {
-			// We're good with this! Return the values.
-			if(selectionURLStrings)
-				*selectionURLStrings = @[focusedUIElementURLString];
-			if(windowFrame)
-				*windowFrame = [self windowFrameOfAXWindow:focusWindow];
-			return YES;
-		}
-	}
-    
-    return NO;
-}
 
 - (void)hotkeyPressed {
 //	NSLog(@"HotKey pressed");
@@ -440,34 +346,21 @@ failedAXDocument:	;
 			// Fall through to the default attempts to set WD from selection
             NSLog(@"exception while trying get selection: %@", e);
 		}
-		
-	}
-
+        
+    }
+    
 	// Otherwise, try to talk to the frontmost app with the Accessibility APIs
-	else if([self isAXTrustedPromptIfNot:NO]) {
-		// Use Accessibility API
-		AXError axErr = kAXErrorSuccess;
-		
-		// Grab system-wide UI Element
-		AXUIElementRef systemElement = AXUIElementCreateSystemWide();
-		if(!systemElement) {
-			NSLog(@"Couldn't get systemElement");
-			goto done;
-		}
-		CF_AUTORELEASE(systemElement);
-		
-		// Follow to focused application
-		CFTypeRef focusedApplication = NULL;
-		axErr = AXUIElementCopyAttributeValue(systemElement, 
-											  kAXFocusedApplicationAttribute,
-											  &focusedApplication);
-		if((axErr != kAXErrorSuccess) || !focusedApplication) {
-			NSLog(@"Couldn't get focused application: %d", axErr);
-			goto done;
-		}
-		CF_AUTORELEASE(focusedApplication);
-		
-		[self findWindowURL:&frontWindowURL selectionURLs:&selectionURLStrings windowFrame:&frontWindowBounds ofAXApplication:focusedApplication];
+    else if([self isAXTrustedPromptIfNot:NO]) {
+		//NSLog(@"try to find application using systemevents api...");
+        
+        SystemEventsWindow * win = [self frontmostWindow];
+        if (win) {
+            NSString * document = [(SBObject *)[(SystemEventsAttribute *)[[win attributes] objectWithName:@"AXDocument"] value] get];
+            if (document != nil) {
+                selectionURLStrings = @[[[NSURL URLWithString:document] absoluteString]];
+            }
+            frontWindowBounds = [self windowFrameOfSystemEventsWindow:win];
+        }
 	}
 	
 	// Numbers returned by AS are funky; adjust to NSWindow coordinates
@@ -480,7 +373,6 @@ failedAXDocument:	;
 //	NSLog(@"Selection URLs: %@", selectionURLs);
 //	NSLog(@"Front window bounds: %@", NSStringFromRect(frontWindowBounds));
 	
-done:
 	// If there's no explicit WD, but we have a front window URL, try to deduce a working directory from that
 	if(!workingDirectory && [frontWindowURL isFileURL]) {
         NSError *error = nil;
@@ -497,10 +389,10 @@ done:
 	}
 	
 	// If there's no explicit WD but we have a selection, try to deduce a working directory from that
-	if(!workingDirectory && selectionURLStrings.count) {
-        NSURL* url = [NSURL URLWithString:(NSString* _Nonnull)selectionURLStrings.firstObject];
-		NSString* path = url.path;
-		workingDirectory = path.stringByDeletingLastPathComponent;
+	if(!workingDirectory && [selectionURLStrings count]) {
+		NSURL* url = [NSURL URLWithString:[selectionURLStrings firstObject]];
+		NSString* path = [url path];
+        workingDirectory = [self findMostReasonableWorkingDirFromPath:path];
 	}
 	
 	// default to the home directory if we *still* don't have an explicit WD
@@ -511,6 +403,70 @@ done:
 											 selection:selectionURLStrings
 										   windowFrame:frontWindowBounds];
 	
+}
+
+- (SystemEventsWindow *)frontmostWindow {
+    SystemEventsApplication * SBSysEvents = (SystemEventsApplication *)[SBApplication applicationWithBundleIdentifier:@"com.apple.systemevents"];
+    NSArray * frontmostProcesses = [[SBSysEvents applicationProcesses]  filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"frontmost == 1 && focused != nil"]];
+    // NSLog(@"frontmostProcesses: %lu", [frontmostProcesses count]);
+    if ([frontmostProcesses count] < 1) {
+        NSLog(@"Could not get frontmost application via systemevents");
+        return nil;
+    }
+    SystemEventsProcess * process = [frontmostProcesses firstObject];
+    // NSLog(@"frontmostProcess: %@", [process name]);
+    SystemEventsWindow * win = [(SBObject *)[(SystemEventsAttribute *)[[process attributes] objectWithName:@"AXFocusedWindow"] value] get];
+    if (win == nil) {
+        NSLog(@"Could not get focused window of frontmost application via systemevents");
+    }
+    return win;
+}
+
+- (NSString *) findMostReasonableWorkingDirFromPath:(NSString *)path {
+    NSLog(@"Find WorkDir: path=%@", path);
+
+    // Try to find reasonable directory, e.g. containing a Makefile/Rakefile/build.xml or .git/.svn/.hg
+    BOOL pathIsDir;
+    BOOL pathExists = [[NSFileManager defaultManager] fileExistsAtPath:path isDirectory:&pathIsDir];
+    if (!pathExists) {
+        NSLog(@"Find WorkDir: FAILED: path doesn't exist");
+        return nil;
+    }
+    if (pathIsDir) {
+        NSLog(@"Find WorkDir: OK: path is a direcory");
+        return path;
+    }
+    
+    if ([[NSUserDefaults standardUserDefaults] boolForKey:DTDisableWorkdirUpfind]) {
+        NSString * workingDir = [path stringByDeletingLastPathComponent];
+        NSLog(@"Find WorkDir: OK: workdir-via-upfind is disabled, so use file's directory: %@", workingDir);
+        return workingDir;
+    }
+    
+    NSString * upfindEntriesStr = [[NSUserDefaults standardUserDefaults] stringForKey:DTWorkdirUpfindEntries];
+    NSMutableCharacterSet * splitSet = [NSMutableCharacterSet whitespaceAndNewlineCharacterSet];
+    [splitSet addCharactersInString:@","];
+    NSArray * upfindEntries = [[upfindEntriesStr componentsSeparatedByCharactersInSet:splitSet] filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@" SELF != \"\" "]];
+    // NSLog(@"Find WorkDir: upfindEntries: %@", upfindEntries);
+
+    NSString * findArgs = [@"-name " stringByAppendingString:[upfindEntries componentsJoinedByString:@" -o -name "]];
+    NSString * findWorkDirUpwardCMD = [NSString stringWithFormat:@""
+                                            "((cd \"%1$@\";while [[ \"$PWD\" != / ]]; do "
+                                            "find \"$PWD\" -maxdepth 1 '(' %2$@ ')' -exec dirname {} ';'"
+                                            "| grep -E '.*' && break; "
+                                            "cd ..; done"
+                                            ")|head -1)", [path stringByDeletingLastPathComponent], findArgs ];
+    // NSLog(@"Find WorkDir: findWorkDirUpwardCMD: %@", findWorkDirUpwardCMD);
+
+    NSString *workingDir = [[self outputStringFromCommand:@"/bin/sh" withArguments:@[@"-c",findWorkDirUpwardCMD]] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+       
+    if (![workingDir isEqualToString:@""]) {
+        NSLog(@"Find WorkDir: OK: workdir found: %@", workingDir);
+        return workingDir;
+    }
+    workingDir = [path stringByDeletingLastPathComponent];
+    NSLog(@"Find WorkDir: OK: workdir NOT found, use fallback: %@", workingDir);
+    return workingDir;
 }
 
 - (BOOL) isAXTrustedPromptIfNot:(BOOL)shouldPrompt
@@ -585,6 +541,35 @@ done:
 	[NSUserDefaultsController sharedUserDefaultsController].values;
 	[currentPrefsValues setValue:panelFont.fontName forKey:DTFontNameKey];
 	[currentPrefsValues setValue:fontSize forKey:DTFontSizeKey];
+}
+
+#pragma mark util
+
+-(NSString *)outputStringFromCommand:(NSString *)command
+                       withArguments:(NSArray *)arguments {
+    NSTask *task;
+    task = [[NSTask alloc] init];
+    [task setLaunchPath: command];
+    
+    NSLog(@"run task: %@",task);
+    [task setArguments: arguments];
+    
+    NSPipe *pipe;
+    pipe = [NSPipe pipe];
+    [task setStandardOutput: pipe];
+    
+    NSFileHandle *file;
+    file = [pipe fileHandleForReading];
+    
+    [task launch];
+    
+    NSData *data;
+    data = [file readDataToEndOfFile];
+    
+    NSString *output;
+    output = [[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding];
+    NSLog(@"output: %@", output);
+    return output;
 }
 
 @end
