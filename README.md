@@ -15,12 +15,12 @@ Command line work isn't a separate task that should live on its own—it's an in
 
 # How to get it?
 
-For drag'n'drop installable DMG images, see the [releases][] section of [muhqu's DTerm fork][releases] on GitHub.  
+For drag'n'drop installable DMG images, see the [releases][] section of [AhiyaHiya's DTerm fork][releases] on GitHub.  
 
 # How to build it yourself?
 
 ``` sh
-git clone git://github.com/muhqu/dterm
+git clone https://github.com/AhiyaHiya/dterm
 cd ./dterm
 ./build.sh --with-dmg
 ```
@@ -36,5 +36,5 @@ Copyright © 2004-2013 [Decimus Software, Inc][decimus].
 
 "DTerm" and "Decimus" are either trademarks or registered trademarks of [Decimus Software, Inc][decimus].
 
-[releases]: https://github.com/muhqu/dterm/releases
+[releases]: https://github.com/AhiyaHiya/dterm/releases
 [decimus]: http://decimus.net
