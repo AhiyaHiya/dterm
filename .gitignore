@@ -1,8 +1,7 @@
-/_bugs/
-/_issues/
-/_ideas/
-
-/Pods/
-dist
-*xcuserstate
-*xcuserdata*
+*.pbxuser
+*.xcodeproj/*/*.xcworkspacedata
+*.xcodeproj/xcuserdata/*
+*.xcodeproj/*/xcuserdata/*
+*.xcodeproj/*/xcshareddata/*.xccheckout
+build/
+yoursway-create-dmg/
